@@ -3,6 +3,7 @@ import './App.css';
 import { Grommet } from 'grommet';
 import { Router } from '@reach/router';
 import Home from './pages/Home';
+import TimerAdmin from './pages/TimerAdmin';
 import Route from './util/Route';
 import AppBar from './parts/AppBar';
 
@@ -22,13 +23,14 @@ const App: React.FC = () => {
       <AppBar />
       <Router>
         <Route component={Home} path="/" />
+        <Route component={TimerAdmin} path="/timerAdmin" />
       </Router>
 
-      <header className="App-header">
+      {/* <header className="App-header">
         <p>
           This is from App.tsx
         </p>
-      </header>
+      </header> */}
     </Grommet>
   );
 }

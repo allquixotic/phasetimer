@@ -1,20 +1,20 @@
 import { Express, Request, Response, NextFunction, Handler } from 'express';
-import ParamsDictionary from 'express-serve-static-core';
 import {
     json,
     // raw,
     // text,
     // urlencoded,
 } from 'body-parser';
-import * as http from 'http';
-import fs from 'fs';
-import { IncomingMessage } from 'http';
 import { compose } from 'compose-middleware';
 import { IHub, Hub, ISseHubResponse, ISseResponse, sseHub, sse, ISseHubMiddlewareOptions, ISseMiddlewareOptions } from '@toverux/expresse';
+import * as DB from 'better-sqlite3-helper';
+import * as rateLimit from 'express-rate-limit';
+const express = require('express');
 const app : Express = require('express')();
 const sessions = new Map<string, SessionData>();
 const letters = Array.from({ length: 26 }, (_, i) => String.fromCharCode('a'.charCodeAt(0) + i));
 const jsonParser = json();
+const crypto = require('crypto');
 
 interface Phase {
     name: string,
@@ -23,11 +23,81 @@ interface Phase {
 
 interface SessionData {
     key: string,
-    lastused: number,
+    lastUsed: number,
     currentPhase: number,
     phases: Phase[],
     hub : Hub
 }
+
+interface PublicSessionData {
+    sid: string,
+    lastUsed: number,
+    currentPhase: number,
+    phases: Phase[]
+}
+
+/**
+ * PERSISTENCE LAYER - Sqlite3
+ */
+const db : DB.BetterSqlite3Helper.DBInstance = DB.default({
+    path: "sessions.db",
+    memory: false,
+    readonly: false,
+    fileMustExist: false,
+    WAL: true,
+    migrate: false
+});
+
+function initDb() {
+    db.run("CREATE TABLE IF NOT EXISTS sessions (sid TEXT PRIMARY KEY, key TEXT NOT NULL, lastUsed INTEGER NOT NULL, currentPhase INTEGER NOT NULL)");
+    db.run("CREATE TABLE IF NOT EXISTS phases (sid TEXT, name TEXT NOT NULL, duration INTEGER NOT NULL, PRIMARY KEY(sid, name), FOREIGN KEY (sid) REFERENCES sessions (sid) ON DELETE CASCADE ON UPDATE NO ACTION)");
+}
+
+function storeSession(sid : string, data : SessionData) {
+    sessions.set(sid, data);
+    //This isn't too insecure because the data.key is actually the sha256 (base64'ed) hash of the original key; only the client can persist the key
+    db.run("REPLACE INTO sessions (sid, key, lastUsed, currentPhase) VALUES (?, ?, ?, ?)", sid, data.key, data.lastUsed, data.currentPhase);
+    db.run("DELETE FROM phases WHERE sid=?", sid);
+    let stmt = db.prepare("REPLACE INTO phases (sid, name, duration) VALUES (?, ?, ?)");
+    if(data.phases) {
+        data.phases.forEach((phase) => {
+            stmt.run(sid, phase.name, phase.duration);
+        });
+    }
+}
+
+function hasSid(sid: string) : boolean {
+    return Number(db.queryFirstCell("SELECT COUNT(sid) FROM sessions WHERE sid=?", sid)) > 0;
+}
+
+function reconstitute() {
+    let sesns = db.queryIterate("SELECT * FROM sessions");
+    for(const row of sesns) {
+        let phazes : Phase[] = [];
+        let sess : SessionData = {
+            key: row.key,
+            lastUsed: row.lastUsed,
+            currentPhase: row.currentPhase,
+            phases: phazes,
+            hub: new Hub()
+        };
+        let phas = db.queryIterate("SELECT * FROM phases");
+        for(const pha of phas) {
+            phazes.push({name: pha.name, duration: pha.duration});
+        }
+        sessions.set(row.sid, sess);
+    }
+}
+
+
+/**
+ * Express middleware for rate limiting
+ */
+const limiter = rateLimit.default({
+    windowMs: 5 * 60 * 1000,
+    max: 100
+});
+app.set('trust proxy', 1);
 
 /**
  * SSE middleware that configures an Express response for an SSE session, installs `sse.*` functions on the Response
@@ -60,12 +130,26 @@ function dynamicSseHub(options: Partial<ISseMiddlewareOptions> = {}): Handler {
     return compose(sse(options), middleware);
 }
 
+function getPublicSessionData(sid: string) : PublicSessionData {
+    let tmp = sessions.get(sid);
+    return tmp ? {
+        sid: sid,
+        lastUsed: tmp.lastUsed,
+        currentPhase: tmp.currentPhase,
+        phases: tmp.phases
+    } : null;
+}
+
 function newSessionId() { 
-    var ans = ''; 
-    for (var i = 8; i > 0; i--) { 
-        ans +=  
-          letters[Math.floor(Math.random() * letters.length)]; 
-    } 
+    let ans = ''; 
+    do {
+        for (let i = 12; i > 0; i--) { 
+            ans +=  
+            letters[Math.floor(Math.random() * letters.length)]; 
+        }
+    }
+    while()
+    
     return ans; 
 } 
 
@@ -78,12 +162,27 @@ function newKey() {
     return ans; 
 }
 
+function keyHash(key: string) : string {
+    let hash = crypto.createHash('sha256').update(key).digest('base64');
+    return hash;
+}
+
 function isAdmin(req : any) {
     let usid = req["sid"], ukey = req["key"];
-    return (usid && ukey && sessions.has(usid) && ukey == sessions.get(usid).key);
+    return (usid && ukey && sessions.has(usid) && keyHash(ukey) == sessions.get(usid).key);
 }
 
 function main() {
+
+    //Brings previous sessions back in with empty Hub
+    initDb();
+    reconstitute();
+
+    app.use(function(req, res, next) {
+        res.header("Access-Control-Allow-Origin", "phasetimer.cc"); // update to match the domain you will make the request from
+        res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+        next();
+      });
 
     app.get('/api/subscribeToChangeNotification', jsonParser, dynamicSseHub(), function(req, res: ISseResponse) {
         res.sse.comment('Connected to SSE!');
@@ -111,13 +210,31 @@ function main() {
         else {
             bin.currentPhase = 0;
         }
+        bin.lastUsed = Date.now();
+        storeSession(usid, bin);
         console.log("Successful advancePhase: %O", bin);
         res.status(200);
         res.end();
         bin.hub.event('advancePhase', {
             sid: usid,
-            currentPhase: bin.currentPhase
+            currentPhase: bin.currentPhase,
+            name: bin.phases[bin.currentPhase].name,
+            duration: bin.phases[bin.currentPhase].duration
         });
+    });
+
+    app.get('/api/getSession', jsonParser, function (req, res) {
+        console.log("getSession REQUEST: %O", req.body);
+        let usid = req.body.sid;
+        let psd = getPublicSessionData(usid);
+        if(psd) {
+            res.status(200);
+            res.json(psd);
+        }
+        else {
+            res.status(403);
+            res.end();
+        }
     });
 
     /*
@@ -144,7 +261,7 @@ function main() {
     Sessions map *value* format:
     {
         key: "mysecretkey",
-        lastused: 0,
+        lastUsed: 0,
         currentPhase: 0,
         phases: [
             {
@@ -162,10 +279,10 @@ function main() {
         ]
     }
     */
-    app.post('/api/updateSession', jsonParser, function (req, res) {
+    app.post('/api/updateSession', limiter, jsonParser, function (req, res) {
         console.log("updateSession REQUEST: %O", req.body);
         let update = req.body;
-        let usid = update["sid"], uphases = update["phases"], ukey = update["key"];
+        let usid = update["sid"], uphases = update["phases"];
         var parsed : Phase[] = [];
         if(!isAdmin(update)) {
             res.status(403);
@@ -190,10 +307,15 @@ function main() {
                     return;
                 }
             }, this);
-            sessions.get(usid).phases = parsed;
-            console.log("Successful updateSession: %O", sessions.get(usid));
+            let bin = sessions.get(usid);
+            bin.lastUsed = Date.now();
+            bin.phases = parsed;
+            storeSession(usid, bin);
+            console.log("Successful updateSession: %O", bin);
             res.status(200);
             res.end();
+            bin.hub.event('updateSession', getPublicSessionData(usid));
+
         }
         else {
             console.warn("Invalid update data passed in");
@@ -202,10 +324,11 @@ function main() {
         }
     });
 
-    app.get('/api/newSession', function (req, res) {
+    app.get('/api/newSession', limiter, function (req, res) {
         let sid = newSessionId();
         let key = newKey();
-        sessions.set(sid, {hub: new Hub(), key : key, lastused: Date.now(), currentPhase: 0, phases: []});
+        let keyh = keyHash(key);
+        sessions.set(sid, {hub: new Hub(), key : keyh, lastUsed: Date.now(), currentPhase: 0, phases: []});
         res.json({ sid: sid, key: key});
         res.status(200);
         console.log("newSession: %s, %O", sid, sessions.get(sid));
@@ -214,7 +337,7 @@ function main() {
 
     app.use(express.static('public'));
 
-    app.listen(43801);
+    app.listen(43801, '127.0.0.1');
 }
 
 main();
