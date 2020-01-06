@@ -39,7 +39,7 @@ interface PublicSessionData {
 /**
  * PERSISTENCE LAYER - Sqlite3
  */
-require('fs').mkdirSync("data");
+try{require('fs').mkdirSync("data");}catch{}
 const db : DB.BetterSqlite3Helper.DBInstance = DB.default({
     path: "data/sessions.db",
     memory: false,
@@ -223,7 +223,7 @@ function main() {
         });
     });
 
-    app.get('/api/getSession', jsonParser, function (req, res) {
+    app.post('/api/getSession', jsonParser, function (req, res) {
         console.log("getSession REQUEST: %O", req.body);
         let usid = req.body.sid;
         let psd = getPublicSessionData(usid);
