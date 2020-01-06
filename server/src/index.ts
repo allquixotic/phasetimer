@@ -39,8 +39,9 @@ interface PublicSessionData {
 /**
  * PERSISTENCE LAYER - Sqlite3
  */
+require('fs').mkdirSync("data");
 const db : DB.BetterSqlite3Helper.DBInstance = DB.default({
-    path: "sessions.db",
+    path: "data/sessions.db",
     memory: false,
     readonly: false,
     fileMustExist: false,
@@ -66,14 +67,18 @@ function storeSession(sid : string, data : SessionData) {
     }
 }
 
-function hasSid(sid: string) : boolean {
-    return Number(db.queryFirstCell("SELECT COUNT(sid) FROM sessions WHERE sid=?", sid)) > 0;
+function advancePhaseInDb(sid: string, phase: number) {
+    db.update("sessions", {currentPhase: phase}, {sid: sid});
 }
 
 function reconstitute() {
     let sesns = db.queryIterate("SELECT * FROM sessions");
     for(const row of sesns) {
         let phazes : Phase[] = [];
+        let phas = db.queryIterate("SELECT * FROM phases");
+        for(const pha of phas) {
+            phazes.push({name: pha.name, duration: pha.duration});
+        }
         let sess : SessionData = {
             key: row.key,
             lastUsed: row.lastUsed,
@@ -81,23 +86,17 @@ function reconstitute() {
             phases: phazes,
             hub: new Hub()
         };
-        let phas = db.queryIterate("SELECT * FROM phases");
-        for(const pha of phas) {
-            phazes.push({name: pha.name, duration: pha.duration});
-        }
         sessions.set(row.sid, sess);
     }
 }
 
-
 /**
- * Express middleware for rate limiting
+ * Express middleware for rate limiting. This one is used for newSession.
  */
 const limiter = rateLimit.default({
-    windowMs: 5 * 60 * 1000,
-    max: 100
+    windowMs: 60 * 1000,
+    max: 5 //5 calls every 60 seconds
 });
-app.set('trust proxy', 1);
 
 /**
  * SSE middleware that configures an Express response for an SSE session, installs `sse.*` functions on the Response
@@ -148,8 +147,7 @@ function newSessionId() {
             letters[Math.floor(Math.random() * letters.length)]; 
         }
     }
-    while()
-    
+    while(sessions.has(ans));
     return ans; 
 } 
 
@@ -177,6 +175,8 @@ function main() {
     //Brings previous sessions back in with empty Hub
     initDb();
     reconstitute();
+
+    app.set('trust proxy', 1);
 
     app.use(function(req, res, next) {
         res.header("Access-Control-Allow-Origin", "phasetimer.cc"); // update to match the domain you will make the request from
@@ -211,7 +211,7 @@ function main() {
             bin.currentPhase = 0;
         }
         bin.lastUsed = Date.now();
-        storeSession(usid, bin);
+        advancePhaseInDb(usid, bin.currentPhase);
         console.log("Successful advancePhase: %O", bin);
         res.status(200);
         res.end();
@@ -279,7 +279,7 @@ function main() {
         ]
     }
     */
-    app.post('/api/updateSession', limiter, jsonParser, function (req, res) {
+    app.post('/api/updateSession', jsonParser, function (req, res) {
         console.log("updateSession REQUEST: %O", req.body);
         let update = req.body;
         let usid = update["sid"], uphases = update["phases"];
@@ -328,12 +328,12 @@ function main() {
         let sid = newSessionId();
         let key = newKey();
         let keyh = keyHash(key);
-        sessions.set(sid, {hub: new Hub(), key : keyh, lastUsed: Date.now(), currentPhase: 0, phases: []});
+        let bin : SessionData = {hub: new Hub(), key : keyh, lastUsed: Date.now(), currentPhase: 0, phases: [] as Phase[]};
+        storeSession(sid, bin);
         res.json({ sid: sid, key: key});
         res.status(200);
         console.log("newSession: %s, %O", sid, sessions.get(sid));
     });
-
 
     app.use(express.static('public'));
 
