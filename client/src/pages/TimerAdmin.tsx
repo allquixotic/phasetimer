@@ -67,7 +67,7 @@ export class TimerAdmin extends Component<{}, TimerAdminState> {
         (this as any)["duration" + idx] = React.createRef();
         return <TableRow key={"row" + (name ? name : idx)}>
         <TableCell scope="row"><TextInput ref={(this as any)["phasename" + idx]} placeholder="Phase Name" defaultValue={name ? name : ""} onChange={(e) => {}}></TextInput></TableCell>
-        <TableCell scope="row"size="xsmall"><MaskedInput ref={(this as any)["duration" + idx]} mask={
+        <TableCell scope="row" size="xsmall"><MaskedInput ref={(this as any)["duration" + idx]} mask={
             [
                 {
                   regexp: /^[1-9][0-9]*$/,
@@ -75,6 +75,7 @@ export class TimerAdmin extends Component<{}, TimerAdminState> {
                 }
             ]
         } defaultValue={duration < 0 ? "" : duration}></MaskedInput></TableCell>
+        <TableCell scope="row" size="xsmall"><Button label="Delete"></Button></TableCell>
         </TableRow>
     }
 
