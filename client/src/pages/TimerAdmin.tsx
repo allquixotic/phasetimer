@@ -1,4 +1,4 @@
-import React, { Component, useState } from 'react';
+import React, { Component, useState, useEffect } from 'react';
 // eslint-disable-next-line
 import { Box, Button, TextField, Typography, Link, Select } from '@material-ui/core';
 import queryString from 'query-string';
@@ -58,36 +58,42 @@ Each phase is an object like this:
 }
 */
 
-export default async (props: any) => {
+export default (props: any) => {
 
-    const getPhases = async (sid: string) => {
+  const [columns] = useState([
+    { name: 'name', title: 'Name' },
+    { name: 'duration', title: 'Duration' },
+  ]);
+  var [auth, setAuth] = useState({sid: "", key: ""} as AuthData);
+  var [rows, setRows] = useState([] as Phase[]);
+  const [editingCells, setEditingCells] = useState([] as CellBeingEdited[]);
+
+  useEffect(() => {
+    async function getPhases(sid: string) {
       let ap : ApiPhase[] = (await (await fetch('https://phasetimer.cc/api/getSession',{method: 'POST', body: JSON.stringify({sid: sid})})).json()).phases;
       let retval : Phase[] = [];
       let idx = 0;
       ap.forEach((ph) => {
         retval.push({id: idx++, name: ph.name, duration: ph.duration});
       });
-      return retval;
-    };
+      setRows(retval);
+    }
 
-    const getAuth = async () => {
+    async function getAuth() {
         const values = queryString.parse(props.location.search);
         if(values.sid && values.key) {
-            return {sid: values.sid, key: values.key} as AuthData;
+            setAuth({sid: values.sid, key: values.key} as AuthData);
         }
         else {
             let authData : AuthData = (await (await fetch('https://phasetimer.cc/api/newSession')).json());
-            return authData;
+            setAuth(authData);
         }
     }
 
-  const [columns] = useState([
-    { name: 'name', title: 'Name' },
-    { name: 'duration', title: 'Duration' },
-  ]);
-  const [auth, setAuth] = useState(await getAuth());
-  const [rows, setRows] = useState(await getPhases(auth.sid));
-  const [editingCells, setEditingCells] = useState([] as CellBeingEdited[]);
+    getAuth().then(() => {
+      getPhases(auth.sid);
+    });
+  }, [auth]);
 
   const commitChanges = ({ added, changed, deleted } : { added?: ReadonlyArray<any>, changed?:{[key: string]: any;}, deleted?: ReadonlyArray<number | string> }) => {
     let changedRows: Phase[] = [];
@@ -118,12 +124,21 @@ export default async (props: any) => {
   };
 
   const addEmptyRow = () => commitChanges({ added: [{} as Phase], changed: undefined, deleted: undefined });
-  let privateLink : string = "timerAdmin?sid=" + auth.sid + "&key=" + auth.key;
+
+  const getPrivateLink = () => {
+    if(auth && auth.sid) {
+      return `timerAdmin?sid=${auth.sid}&key=${auth.key}`;
+    }
+    else {
+      return "";
+    }
+  }
+
   return (
     <Paper>
         <Typography>Set up the phases of your timer!</Typography>
-        <Typography>Your <b>public</b> timer link is: <Link href={"timer/" + auth.sid}>{"https://phasetimer.cc/timer/" + auth.sid}</Link></Typography>
-        <Typography>Your <b>admin</b> timer link is: <Link href={privateLink}>{"https://phasetimer.cc/timerAdmin/..."}</Link> (right-click and Copy Link Location!)</Typography>
+        <Typography>Your <b>public</b> timer link is: <Link href={"timer/" + (auth && auth.sid ? auth.sid : "")}>{"https://phasetimer.cc/timer/" + (auth && auth.sid ? auth.sid : "")}</Link></Typography>
+        <Typography>Your <b>admin</b> timer link is: <Link href={getPrivateLink()}>{"https://phasetimer.cc/timerAdmin/..."}</Link> (right-click and Copy Link Location!)</Typography>
         <Typography>If you plan to keep this timer around, you should bookmark or save the admin link. Once you navigate away from this page, there's no way to get it back.</Typography>
         <Typography>Phases are executed from top to bottom.</Typography>
       <Grid
