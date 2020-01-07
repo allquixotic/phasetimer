@@ -1,6 +1,6 @@
 import React from 'react';
 // eslint-disable-next-line
-import { Grommet, Box, Button, TextInput, Paragraph } from 'grommet';
+import { Box, Button, TextField, Typography } from '@material-ui/core';
 import {navigate} from '@reach/router';
 
 const Home: React.FC = () => {
@@ -8,14 +8,14 @@ const Home: React.FC = () => {
     const divStyle = {marginLeft: '8px'} as React.CSSProperties;
   return (
     <div style={divStyle}>
-      <Paragraph margin="small">Welcome! You can:</Paragraph>
-      <Button id="new" primary label="Create new timer" onClick={(e) => {
+      <Typography>Welcome! You can:</Typography>
+      <Button onClick={(e) => {
           navigate("/timerAdmin");
-      }}/>
+      }}>Create new timer</Button>
       <br/>
-      <Paragraph margin="small"><b>OR</b></Paragraph>
-      <Box width="small"><TextInput placeholder="Enter Timer ID" id='sid'></TextInput></Box><br/>
-      <Button id="join" type="submit" value={value} onChange={event => setValue((event.target as HTMLInputElement).value)} label="View existing timer"/>
+      <Typography><b>OR</b></Typography>
+      <Box width="small"><TextField></TextField></Box><br/>
+      <Button type="submit" value={value} onChange={event => setValue((event.target as HTMLInputElement).value)}>View existing timer</Button>
     </div>
   );
 }

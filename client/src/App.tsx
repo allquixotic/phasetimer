@@ -1,11 +1,11 @@
 import React from 'react';
 import './App.css';
-import { Grommet } from 'grommet';
 import { Router } from '@reach/router';
 import Home from './pages/Home';
 import TimerAdmin from './pages/TimerAdmin';
 import Route from './util/Route';
-import AppBar from './parts/AppBar';
+import MyAppBar from './parts/MyAppBar';
+import { Box } from '@material-ui/core';
 
 const theme = {
   global: {
@@ -19,19 +19,13 @@ const theme = {
 
 const App: React.FC = () => {
   return (
-    <Grommet theme={theme}>
-      <AppBar />
-      <Router>
-        <Route component={Home} path="/" />
-        <Route component={TimerAdmin} path="/timerAdmin" />
-      </Router>
-
-      {/* <header className="App-header">
-        <p>
-          This is from App.tsx
-        </p>
-      </header> */}
-    </Grommet>
+      <Box>
+        <MyAppBar />
+        <Router>
+          <Route component={Home} path="/" />
+          <Route component={TimerAdmin} path="/timerAdmin" />
+        </Router>
+      </Box>
   );
 }
 
