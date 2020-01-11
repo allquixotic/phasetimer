@@ -9,13 +9,13 @@ const Home: React.FC = () => {
   return (
     <div style={divStyle}>
       <Typography>Welcome! You can:</Typography>
-      <Button onClick={(e) => {
+      <Button variant="contained" color="primary" onClick={(e) => {
           navigate("/timerAdmin");
       }}>Create new timer</Button>
       <br/>
       <Typography><b>OR</b></Typography>
-      <Box width="small"><TextField></TextField></Box><br/>
-      <Button type="submit" value={value} onChange={event => setValue((event.target as HTMLInputElement).value)}>View existing timer</Button>
+      <Box width="small"><TextField variant="filled"></TextField></Box><br/>
+      <Button variant="contained" color="primary" type="submit" value={value} onChange={event => setValue((event.target as HTMLInputElement).value)}>View existing timer</Button>
     </div>
   );
 }

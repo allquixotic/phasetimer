@@ -7,6 +7,7 @@ import Route from './util/Route';
 import MyAppBar from './parts/MyAppBar';
 import { Box } from '@material-ui/core';
 
+// eslint-disable-next-line
 const theme = {
   global: {
     font: {

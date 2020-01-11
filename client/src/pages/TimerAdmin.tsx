@@ -1,3 +1,4 @@
+// eslint-disable-next-line
 import React, { Component, useState, useEffect } from 'react';
 // eslint-disable-next-line
 import { Box, Button, TextField, Typography, Link, Select } from '@material-ui/core';
@@ -5,6 +6,7 @@ import queryString from 'query-string';
 // eslint-disable-next-line
 import { navigate } from '@reach/router';
 import Paper from '@material-ui/core/Paper';
+// eslint-disable-next-line
 import { EditingState, ChangeSet } from '@devexpress/dx-react-grid';
 import {
   Grid,
@@ -93,7 +95,7 @@ export default (props: any) => {
     getAuth().then(() => {
       getPhases(auth.sid);
     });
-  }, [auth]);
+  }, [auth, props.location.search]);
 
   const commitChanges = ({ added, changed, deleted } : { added?: ReadonlyArray<any>, changed?:{[key: string]: any;}, deleted?: ReadonlyArray<number | string> }) => {
     let changedRows: Phase[] = [];
