@@ -1,3 +1,10 @@
+server/data
+api/*.ts
+client/src/api/
+.swagger-codegen/
+.swagger-codegen-ignore
+typings
+git_push.sh
 client/build/
 server/data/
 *.db

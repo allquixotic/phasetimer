@@ -1,0 +1,150 @@
+swagger: "2.0"
+info:
+  title: PhaseTimer API
+  description: API description for PhaseTimer
+  version: 1.0.0
+host: phasetimer.cc
+basePath: /api
+schemes:
+  - https
+definitions:
+  AnonAuthData:
+    type: object
+    required:
+      - sid
+    properties:
+      sid:
+        type: string
+  AdminAuthData:
+    allOf:
+      - $ref: '#/definitions/AnonAuthData'
+      - required:
+          - key
+      - properties:
+          key:
+            type: string
+  Phase:
+    type: object
+    required:
+      - name
+      - duration
+    properties:
+      name:
+        type: string
+      duration:
+        type: integer
+  UpdateSessionData:
+    allOf:
+      - $ref: '#/definitions/AdminAuthData'
+      - required:
+          - phases
+      - properties:
+          phases:
+            type: array
+            items:
+              $ref: '#/definitions/Phase'
+  PublicSessionData:
+    type: object
+    required:
+      - sid
+      - lastUsed
+      - currentPhase
+      - phases
+    properties:
+      sid:
+        type: string
+      lastUsed:
+        type: integer
+      currentPhase:
+        type: integer
+      phases:
+        type: array
+        items:
+          $ref: '#/definitions/Phase'
+paths:
+  /newSession:
+    get:
+      summary: Get a new session token.
+      description: sid is the public token; key is the admin password to update this session.
+      produces:
+        - application/json
+      responses:
+        200:
+          description: OK
+          schema:
+            $ref: '#/definitions/AdminAuthData'
+  /advancePhase:
+    post:
+      summary: Advance to the next phase of the timer or loop back to the beginning.
+      description: This is an admin action requiring you to pass in an AdminAuthData.
+      consumes:
+        - application/json
+      produces:
+        - text/plain
+      parameters:
+        - in: body
+          name: auth
+          description: Timer admin authentication credentials.
+          schema:
+            $ref: '#/definitions/AdminAuthData'
+      responses:
+        200:
+          description: OK
+        403:
+          description: Credential problem.
+  /getSession:
+    post:
+      summary: Get current info for a timer.
+      description: All that's needed as input is the sid. This is publicly-available data.
+      produces:
+        - application/json
+      consumes:
+        - application/json
+      parameters:
+        - in: body
+          name: session
+          description: Timer public sid.
+          schema:
+            $ref: '#/definitions/AnonAuthData'
+      responses:
+        200:
+          description: A PublicSessionData object.
+          schema:
+            $ref: '#/definitions/PublicSessionData'
+        403:
+          description: Invalid session ID.
+  /updateSession:
+    post:
+      summary: Update a session with new phases.
+      consumes:
+        - application/json
+      produces:
+        - text/plain
+      parameters:
+        - in: body
+          name: auth
+          description: Session update data and admin authentication.
+          schema:
+            $ref: '#/definitions/UpdateSessionData'
+      responses:
+        200:
+          description: OK
+        403:
+          description: Credential problem.
+  /subscribeToChangeNotification:
+    post:
+      summary: Subscribe to SSEs with session updates.
+      consumes:
+        - application/json
+      produces:
+        - text/plain
+      parameters:
+        - in:  body
+          name: session
+          description: Timer public sid.
+          schema:
+            $ref: '#/definitions/AnonAuthData'
+      responses:
+        200:
+          description: OK
+      

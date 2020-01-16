@@ -15,19 +15,13 @@ import {
   TableEditColumn,
   TableInlineCellEditing,
 } from '@devexpress/dx-react-grid-material-ui';
+import { Phase, AnonAuthData, AdminAuthData, UpdateSessionData, PublicSessionData } from '../api/index';
+import { DefaultApi as PhaseTimerApi } from '../api/index';
+const api : PhaseTimerApi = new PhaseTimerApi();
 
-interface AuthData {
-  sid: string,
-  key: string
-}
 
-interface Phase {
+interface UiPhase {
   id: number,
-  name: string,
-  duration: number
-}
-
-interface ApiPhase {
   name: string,
   duration: number
 }
@@ -66,39 +60,58 @@ export default (props: any) => {
     { name: 'name', title: 'Name' },
     { name: 'duration', title: 'Duration' },
   ]);
-  var [auth, setAuth] = useState({sid: "", key: ""} as AuthData);
-  var [rows, setRows] = useState([] as Phase[]);
+  var [auth, setAuth] = useState({sid: "", key: ""} as AdminAuthData);
+  var [rows, setRows] = useState([] as UiPhase[]);
   const [editingCells, setEditingCells] = useState([] as CellBeingEdited[]);
 
-  useEffect(() => {
-    async function getPhases(sid: string) {
-      let ap : ApiPhase[] = (await (await fetch('https://phasetimer.cc/api/getSession',{method: 'POST', body: JSON.stringify({sid: sid})})).json()).phases;
-      let retval : Phase[] = [];
-      let idx = 0;
-      ap.forEach((ph) => {
-        retval.push({id: idx++, name: ph.name, duration: ph.duration});
-      });
-      setRows(retval);
-    }
+  async function getPhases(asid: string) {
+    //let ap : Phase[] = (await (await fetch('https://phasetimer.cc/api/getSession',{method: 'POST', body: JSON.stringify({sid: asid})})).json()).phases;
+    let psd : PublicSessionData = await api.getSessionPost({ sid: asid });
+    let ap : Phase[] = psd.phases;
+    let retval : UiPhase[] = [];
+    let idx = 0;
+    ap.forEach((ph) => {
+      retval.push({id: idx++, name: ph.name, duration: ph.duration});
+    });
+    setRows(retval);
+  };
 
-    async function getAuth() {
+  useEffect(() => {
+    async function getAuth() : Promise<{val: AnonAuthData, changed: boolean}> {
         const values = queryString.parse(props.location.search);
-        if(values.sid && values.key) {
-            setAuth({sid: values.sid, key: values.key} as AuthData);
+        let retval: AdminAuthData = {sid: "", key: ""} as AdminAuthData;
+        let changed : boolean = false;
+        if(values.sid && values.key && (values.sid !== auth.sid || values.key !== auth.key)) {
+            retval = {sid: values.sid, key: values.key} as AdminAuthData;
+            changed = true;
         }
         else {
-            let authData : AuthData = (await (await fetch('https://phasetimer.cc/api/newSession')).json());
-            setAuth(authData);
+            if(!auth.key && !auth.sid) {
+              retval = await api.newSessionGet();
+              changed = true;
+            }
         }
+        return {val: retval, changed: changed};
     }
 
-    getAuth().then(() => {
-      getPhases(auth.sid);
+    getAuth().then((arg : {val: AdminAuthData, changed: boolean}) => {
+      if(arg.changed) {
+        setAuth(arg.val);
+        getPhases(arg.val.sid).then(() => {
+          let wl = window.location;
+          let newurl = `${wl.protocol}//${wl.host}${wl.pathname}?sid=${arg.val.sid}&key=${arg.val.key}`;
+          window.history.pushState({path: newurl}, '', newurl);
+        });
+      }
     });
   }, [auth, props.location.search]);
 
+  useEffect(() => {
+    
+  }, [rows])
+
   const commitChanges = ({ added, changed, deleted } : { added?: ReadonlyArray<any>, changed?:{[key: string]: any;}, deleted?: ReadonlyArray<number | string> }) => {
-    let changedRows: Phase[] = [];
+    let changedRows: UiPhase[] = [];
     if (added) {
       const startingAddedId = rows.length > 0
         ? Math.max(rows[rows.length - 1].id, rows[0].id) + 1
@@ -125,7 +138,7 @@ export default (props: any) => {
     setRows(changedRows);
   };
 
-  const addEmptyRow = () => commitChanges({ added: [{} as Phase], changed: undefined, deleted: undefined });
+  const addEmptyRow = () => commitChanges({ added: [{} as UiPhase], changed: undefined, deleted: undefined });
 
   const getPrivateLink = () => {
     if(auth && auth.sid) {
