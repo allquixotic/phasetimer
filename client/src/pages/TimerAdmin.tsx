@@ -65,7 +65,6 @@ export default (props: any) => {
   const [editingCells, setEditingCells] = useState([] as CellBeingEdited[]);
 
   async function getPhases(asid: string) {
-    //let ap : Phase[] = (await (await fetch('https://phasetimer.cc/api/getSession',{method: 'POST', body: JSON.stringify({sid: asid})})).json()).phases;
     let psd : PublicSessionData = await api.getSessionPost({ sid: asid });
     let ap : Phase[] = psd.phases;
     let retval : UiPhase[] = [];
@@ -107,8 +106,18 @@ export default (props: any) => {
   }, [auth, props.location.search]);
 
   useEffect(() => {
-    
-  }, [rows])
+    function uiPhasesToPhases() : Phase[] {
+      let retval : Phase[] = [];
+      rows.forEach((p : UiPhase) => {
+        retval.push({name: p.name, duration: p.duration});
+      });
+      return retval;
+    }
+
+    if(auth.sid && auth.key) {
+      api.updateSessionPost({sid: auth.sid, key: auth.key, phases: uiPhasesToPhases()});
+    }
+  }, [rows]);
 
   const commitChanges = ({ added, changed, deleted } : { added?: ReadonlyArray<any>, changed?:{[key: string]: any;}, deleted?: ReadonlyArray<number | string> }) => {
     let changedRows: UiPhase[] = [];
